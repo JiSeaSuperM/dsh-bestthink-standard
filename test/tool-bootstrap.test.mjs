@@ -59,7 +59,7 @@ test('default guide is injected once for every model during bootstrap', async ()
     const decision = await prestep(listeners['agent/pre-step'], [], [userMessage], 's-' + model)
     const guides = decision.messages.filter((message) => message.source?.kind === 'plugin' && message.source?.plugin === name)
     assert.equal(guides.length, 1, `${model}: one guide`)
-    assert.ok(guides[0].content[0].text.includes('act now'), `${model}: default text`)
+    assert.ok(guides[0].content[0].text.includes('call exactly one tool NOW'), `${model}: hard-action default text`)
   }
 })
 

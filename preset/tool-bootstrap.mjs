@@ -71,15 +71,21 @@ const DEFAULT_BOOTSTRAP_MAX_TOKENS = 1024
 /**
  * One-shot first-turn quick-action guide (all models). The FIRST wave of
  * thinking is the only one under the bootstrap budget; a complex first task
- * can blow past 1024 and end the first step empty (measured interruption,
- * session(3)). This fixed near-field user message (the measured strongest
- * guidance position) guides that first wave to act quickly; detailed
- * reasoning is deferred to later steps, which run at the session's own
- * unlimited budget. The system prompt is never touched, so the minimal
- * anchor stays byte-exact.
+ * can blow past it and end the first step empty (measured interruption:
+ * session(3) flash 1852 chars, pro黑洞2 pro 2329 chars). This fixed
+ * near-field user message (the measured strongest guidance position) guides
+ * that first wave to act quickly; detailed reasoning is deferred to later
+ * steps, which run at the session's own unlimited budget. The system prompt
+ * is never touched, so the minimal anchor stays byte-exact.
+ *
+ * The wording must be HARD against first-turn design reasoning: the Pro
+ * failure mode is knowing the instruction yet expanding the full design in
+ * the first think block anyway ("按照指令第一轮要立即调用工具" followed by a
+ * complete WebGL shader plan). Explicitly forbidding design/planning in the
+ * first turn is what makes the wave fit the budget.
  */
 const DEFAULT_FIRST_TURN_GUIDE =
-  'First turn: act now — call a tool (read a file or run a command) rather than planning at length. Detailed reasoning can come in later steps.'
+  'First turn: call exactly one tool NOW (read a file or run a command). Do NOT design, plan, or analyze in this turn — no architecture, no implementation details. All design and planning happens in later steps, after the tool result.'
 
 /** Durable session event types that count as a promotion signal per mode. */
 const PROMOTE_EVENTS = {

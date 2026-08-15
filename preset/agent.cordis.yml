@@ -70,10 +70,12 @@
     # One-shot first-turn quick-action guide (all models; '' disables, custom
     # string replaces the default): the first wave of thinking is the only one
     # under the 1024 budget, so guide it to act quickly instead of widening
-    # the budget. Injected as a near-field user message (never into the system
-    # prompt — the minimal anchor stays byte-exact), stops automatically after
-    # promotion.
-    # firstTurnGuideText: 'First turn: act now — call a tool (read a file or run a command) rather than planning at length. Detailed reasoning can come in later steps.'
+    # the budget. The wording hard-forbids first-turn design reasoning (Pro
+    # failure mode: knowing the instruction yet expanding the full design in
+    # the first think block). Injected as a near-field user message (never
+    # into the system prompt — the minimal anchor stays byte-exact), stops
+    # automatically after promotion.
+    # firstTurnGuideText: 'First turn: call exactly one tool NOW (read a file or run a command). Do NOT design, plan, or analyze in this turn — no architecture, no implementation details. All design and planning happens in later steps, after the tool result.'
 
 # ── identity ────────────────────────────────────────────────────────────────
 #
