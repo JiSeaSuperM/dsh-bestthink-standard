@@ -17,7 +17,9 @@ DeepSeek V4 Pro 的行为被「首轮请求的完整 system prompt + 工具 sche
 
 1. **system 纯净**：persona 行 = minimal 句（`complete: true`），组装后
    system 仅有这一句话（identity/工具指南/插件说明全部被抑制）
-2. **输出预算**：首轮 `maxTokens=1024`（晋升后显式剥离，防泄漏）
+2. **输出预算**：首轮 `maxTokens=1024`（Pro 实测锚定值；**Flash 模型自动
+   提高到 4096**——flash 的 reasoning 明显更长，1024 会令复杂任务首轮
+   reasoning 撞预算 → 空转中断；晋升后显式剥离，防泄漏）
 3. **窄工具面 + 剥离注入**：首轮仅 shell + `read`；剥离 skill-catalog /
    AGENTS.md 注入消息
 
@@ -88,7 +90,8 @@ dsh-bestthink-standard/
 | tool-bootstrap 行 | `shellTools` | `[bash, pwsh]` | 候选平台 shell |
 | | `commonTools` | `[read]` | 首轮核心工具 |
 | | `promoteOn` | `either` | `tool-call` / `assistant-message` / `either` |
-| | `bootstrapMaxTokens` | `1024` | 首轮输出预算（晋升后显式剥离） |
+| | `bootstrapMaxTokens` | `1024` | Pro 首轮输出预算（晋升后显式剥离） |
+| | `bootstrapFlashMaxTokens` | `4096` | Flash 系模型首轮预算（防 reasoning 撞预算中断） |
 | | `suppressedContextSources` | `[skill-catalog, agent-instructions]` | 首轮剥离的消息源；空数组禁用剥离 |
 | persona 行 | `text` | minimal 句 | 建议保持 minimal 句（实测最佳思维链） |
 | | `complete` | `true` | system 仅此一段（锚定的核心） |

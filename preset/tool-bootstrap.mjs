@@ -8,6 +8,11 @@
  * original comments, logic, and configuration names are preserved so upstream
  * diffs stay readable; this port adds:
  *   - `suppressedContextSources` (configurable strip list, empty = disabled)
+ *   - `bootstrapFlashMaxTokens` (model-adaptive first-request budget:
+ *     Flash-family models get a larger cap, default 4096, because their
+ *     reasoning at the same effort runs visibly longer than Pro's and the
+ *     measured 1024 anchor left complex first tasks empty — see
+ *     `DEFAULT_BOOTSTRAP_FLASH_MAX_TOKENS`)
  *   - shared `promotionSignal()` / anchor-override exports (kept for tooling
  *     and tests).
  *
@@ -63,6 +68,21 @@ export const name = 'bestthink-tool-bootstrap'
 export const inject = []
 
 const DEFAULT_BOOTSTRAP_MAX_TOKENS = 1024
+
+/**
+ * Bootstrap budget for Flash-family models. The measured 1024 anchor value
+ * comes from v4-pro (Project2: "We need" trajectory in 26/32 runs). Flash
+ * reasoning is visibly longer at the same reasoning_effort: a complex first
+ * task produced 1852 chars (~1200+ tokens) of reasoning and exceeded 1024,
+ * so the first step ended empty (interruption). Flash gets a larger budget
+ * by default; the value stays configurable.
+ */
+const DEFAULT_BOOTSTRAP_FLASH_MAX_TOKENS = 4096
+
+/** True when the routed model id is a Flash-family model. */
+function isFlashModel(modelId) {
+  return typeof modelId === 'string' && /flash/i.test(modelId)
+}
 
 /** Durable session event types that count as a promotion signal per mode. */
 const PROMOTE_EVENTS = {
@@ -134,6 +154,10 @@ export function apply(ctx, config) {
   const shellTools = stringList(config.shellTools, 'shellTools')
   const promoteOn = parsePromoteOn(config.promoteOn)
   const bootstrapMaxTokens = positiveInt(config.bootstrapMaxTokens, 'bootstrapMaxTokens', DEFAULT_BOOTSTRAP_MAX_TOKENS)
+  const bootstrapFlashMaxTokens = positiveInt(
+    config.bootstrapFlashMaxTokens, 'bootstrapFlashMaxTokens', DEFAULT_BOOTSTRAP_FLASH_MAX_TOKENS,
+  )
+  const bootstrapBudgets = new Set([bootstrapMaxTokens, bootstrapFlashMaxTokens])
   const suppressedContextSources = new Set(
     stringListAllowEmpty(config.suppressedContextSources ?? DEFAULT_SUPPRESSED_CONTEXT_SOURCES, 'suppressedContextSources'),
   )
@@ -202,6 +226,9 @@ export function apply(ctx, config) {
     }
   })
 
+  /** The bootstrap output budget for the agent's model (Flash gets more). */
+  const budgetFor = (agent) => (isFlashModel(agent?.options?.model) ? bootstrapFlashMaxTokens : bootstrapMaxTokens)
+
   // Cap the first model request's output budget while bootstrapping.
   ctx.on('agent/request', async (payload, next) => {
     const resolved = await next()
@@ -210,7 +237,7 @@ export function apply(ctx, config) {
       // The next request's seed proposal carries the previous header's
       // maxTokens forward, so the injected cap must be stripped explicitly —
       // otherwise it would persist for the whole session.
-      if (resolved.maxTokens === bootstrapMaxTokens) {
+      if (bootstrapBudgets.has(resolved.maxTokens)) {
         const { maxTokens: _bootstrap, ...rest } = resolved
         return rest
       }
@@ -218,7 +245,7 @@ export function apply(ctx, config) {
     }
     return {
       ...resolved,
-      maxTokens: bootstrapMaxTokens,
+      maxTokens: budgetFor(agent),
     }
   })
 

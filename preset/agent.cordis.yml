@@ -53,11 +53,14 @@
 # request via the agent/pre-step waterfall, and waterfall after-next
 # transforms apply in reverse registration order. Registering first (plus the
 # plugin empty inject list) makes this filter strip the LAST transform, so
-# request #1 stays Minimal-exact. It also caps request #1 at 1024 maxTokens
-# and narrows the tool catalog to shell + read; after the session records its
-# first durable promotion signal (a tool call OR the first assistant message,
-# `promoteOn: either`), later steps expose every Standard tool below and the
-# normal output budget returns. See tool-bootstrap.mjs.
+# request #1 stays Minimal-exact. It also caps request #1 at a small maxTokens
+# (1024 for Pro — the measured anchor value; Flash-family models get 4096 by
+# default because their reasoning runs visibly longer and 1024 left complex
+# first tasks empty/interrupted) and narrows the tool catalog to shell + read;
+# after the session records its first durable promotion signal (a tool call OR
+# the first assistant message, `promoteOn: either`), later steps expose every
+# Standard tool below and the normal output budget returns. See
+# tool-bootstrap.mjs.
 - id: tool-bootstrap
   name: ./tool-bootstrap.mjs
   config:
@@ -65,6 +68,7 @@
     commonTools: [read]
     promoteOn: either
     bootstrapMaxTokens: 1024
+    bootstrapFlashMaxTokens: 4096
 
 # ── identity ────────────────────────────────────────────────────────────────
 #
