@@ -2,25 +2,31 @@
 #
 # One preset, two phases:
 #   bootstrap (first request) — the FIRST model request enters the
-#     RL-aligned trajectory: one platform shell + one core tool (read),
-#     maxTokens=1024, and injected context (skill catalog / AGENTS.md)
-#     stripped, with the mode-matched persona (spec / react / weak).
+#     RL-aligned trajectory: the minimal persona as the ONLY system section,
+#     one platform shell + one core tool (read), maxTokens=1024, and injected
+#     context (skill catalog / AGENTS.md) stripped.
 #   promoted (from the first durable tool/call or assistant message) — the
 #     full Standard catalog below, the normal output budget, and workspace
 #     context restored. The system prompt stays constant for the whole
 #     session (cache: one miss at most).
 #
-# Derived from the official `standard` preset of DeepSeek Harness
-# 0.1.0-rc.5 / commit 47f9438 (see NOTICE). The `persona` row of the
-# original is REMOVED: the router plugin injects the mode-matched persona
-# section (router-persona) and keeps every other section (plan-mode above
-# all). The two bootstrap rows are prepended and MUST stay FIRST:
+# This is the anchored-standard architecture (two-phase minimal anchor, then
+# full Standard capability) rebuilt on the official `standard` preset of
+# DeepSeek Harness 0.1.0-rc.5 / commit 47f9438 (see NOTICE). A task-router
+# (spec/react/weak persona selection) was tried and removed: its classifier
+# cannot read the first user message at assembly time (user/message events
+# persist only after the pre-step waterfall, while system-prompt/assemble
+# runs before it), so first requests fell into the weak persona, whose long
+# guidance text inflated first-turn reasoning past the 1024 budget and
+# produced empty steps. The measured best-thinking trajectory is the minimal
+# one (Project2: minimal 99/96, anchored 98/99 vs standard 91), so the
+# bootstrap persona is unconditionally the RL-aligned sentence.
+#
+# The bootstrap row is prepended and MUST stay FIRST:
 #
 #   - tool-bootstrap (row 1) has an EMPTY inject list; combined with the
 #     first row position, its `agent/pre-step` strip is the LAST waterfall
 #     transform, so it actually removes what later plugins inject.
-#   - router-bootstrap (row 2) injects ['systemPrompt','tools','llm'] — the
-#     tool-bootstrap inject list must NEVER be confused with this one.
 #
 # This file is an AGENT-PLANE composition. The roster mounts it ONCE under a
 # standing scope; every session naming it joins by scope parentage, so the
@@ -39,7 +45,7 @@
 # pool instances — `provide()` throws on the second registration under the
 # same realm symbol; labels join REALMS, and are not what this file needs.)
 
-# ── bootstrap (rows 1-2, order-sensitive) ──────────────────────────────────
+# ── bootstrap (row 1, order-sensitive) ──────────────────────────────────────
 
 # Row 1 — FIRST-REQUEST ANCHOR. Must be the very first row and the plugin must
 # keep its empty inject list: dsh-agent-instructions and dsh-tool-skill inject
@@ -60,34 +66,22 @@
     promoteOn: either
     bootstrapMaxTokens: 1024
 
-# Row 2 — TASK-ROUTING. Classifies the session's first user message
-# (build→react / fix→spec / ambiguous→weak), injects the mode-matched persona
-# section and the first-turn core tool set (spec: read/edit/glob/grep +
-# shell; react: read/write/edit + shell; weak: model-routes itself), and in
-# weak mode appends one fixed near-field guidance message after every real
-# user message. During the bootstrap phase the assembled sections are
-# replaced with ONLY the router persona (plus plan:policy, empty outside plan
-# mode) — the minimal-preset `complete` shape, so the first request is
-# RL-aligned instead of carrying identity/instructions/tool-guidance/plugin
-# sections (see router-bootstrap.mjs "anchor purity"). After the first
-# durable promotion signal the full catalog, the full sections, and the full
-# contexts return. `mode: auto` classifies per task; a fixed band name
-# (spec / weak / mixed / react) pins every session instead. `promoteOn` must
-# mirror row 1 so both plugins agree on the promotion phase. See
-# router-bootstrap.mjs / router-core.mjs.
-- id: router-bootstrap
-  name: ./router-bootstrap.mjs
-  config:
-    mode: auto
-    promoteOn: either
-
 # ── identity ────────────────────────────────────────────────────────────────
 #
-# NOTE: the official `standard` persona row is intentionally absent. The
-# router injects the mode-matched persona section (router-persona); during
-# bootstrap it is the ONLY section (plus plan:policy, empty outside plan
-# mode), after promotion the full section stack returns with the persona
-# replaced. See router-bootstrap.mjs.
+# The persona row is byte-identical to the official `minimal` preset (and to
+# anchored-standard): the RL-aligned sentence. `complete: true` makes the
+# assembled system prompt consist of THIS section alone — the harness
+# identity, workspace instructions, tool guidance, and plugin sections are all
+# suppressed — which is what puts the first request into the measured
+# best-thinking trajectory. `includeRuntimeContext: false` suppresses the
+# dynamic runtime-context snapshot. The persona stays fixed for the whole
+# session.
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: You are a helpful software engineer assistant.
+    complete: true
+    includeRuntimeContext: false
 
 - id: agent-instructions
   name: '@deepseek-ai/dsh-agent-instructions'
@@ -162,11 +156,10 @@
 # ── plan mode ───────────────────────────────────────────────────────────────
 
 # Plan state is per-agent by nature, so an entry-local realm is not a
-# workaround here — it is the correct lifetime. The router keeps this
-# section: during bootstrap it is carried alongside the router persona (its
-# text is empty outside plan mode and renders to nothing), and after
-# promotion applyPersona preserves it (it only replaces persona-named
-# sections).
+# workaround here — it is the correct lifetime. Note: with the minimal
+# `complete: true` persona, the plan:policy section is suppressed while the
+# session is in the bootstrap/promoted phases just like every other section
+# (same behavior as anchored-standard and the official minimal preset).
 - id: planning
   name: cordis:group
   group: true

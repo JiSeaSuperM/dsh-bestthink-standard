@@ -1,7 +1,8 @@
 name: 最佳思维链标准模式
 description: >-
   Best-Thinking + Standard mode: the first request enters the RL-aligned
-  trajectory (mode-matched persona + narrow tool surface + 1024 output budget,
-  injected context stripped), then auto-promotes to the full Standard catalog
-  with workspace context restored. 首轮进入最佳思维链轨迹（spec/react/weak 三带
-  按任务匹配），首次工具调用后自动晋升完整标准 25 工具，system prompt 全程不变。
+  minimal trajectory (the minimal sentence as the ONLY system section,
+  narrow tool surface, 1024 output budget, injected context stripped),
+  then auto-promotes to the full Standard catalog with workspace context
+  restored. 首轮无条件进入 minimal 极简思维链（实测最佳思维链），首次工具
+  调用后自动晋升完整标准 25 工具，system prompt 全程不变。

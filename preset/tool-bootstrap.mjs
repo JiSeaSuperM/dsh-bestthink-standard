@@ -8,10 +8,8 @@
  * original comments, logic, and configuration names are preserved so upstream
  * diffs stay readable; this port adds:
  *   - `suppressedContextSources` (configurable strip list, empty = disabled)
- *   - shared `promotionSignal()` / anchor-override exports consumed by
- *     router-bootstrap.mjs so BOTH plugins agree on one promotion phase
- *     (upstream router only watched `tool/call`, which would disagree with
- *     `promoteOn: assistant-message` / `either`).
+ *   - shared `promotionSignal()` / anchor-override exports (kept for tooling
+ *     and tests).
  *
  * The phase is derived from durable session events, so resume and reload
  * preserve it. By default (`promoteOn: 'either'`) a session promotes after the
@@ -77,8 +75,8 @@ const PROMOTE_EVENTS = {
 const DEFAULT_SUPPRESSED_CONTEXT_SOURCES = ['skill-catalog', 'agent-instructions']
 
 /**
- * Pure promotion signal check shared with router-bootstrap.mjs so the two
- * plugins always agree on the phase for the same `promoteOn` mode.
+ * Pure promotion signal check (shared export; the task-router plugin that
+ * consumed it was removed — the anchor is the only phase authority now).
  * @param events - durable session events (each with a `type`).
  * @param promoteOn - 'tool-call' | 'assistant-message' | 'either' | 'off'.
  *   'off' disables the bootstrap phase entirely (always promoted).
