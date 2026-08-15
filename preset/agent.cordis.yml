@@ -68,7 +68,18 @@
     commonTools: [read]
     promoteOn: either
     bootstrapMaxTokens: 1024
+    # Flash-family models get a larger first-request budget (default 4096)
+    # because their reasoning runs visibly longer than Pro's and the 1024
+    # anchor left complex first tasks empty (measured interruption); Pro
+    # keeps the measured 1024.
     bootstrapFlashMaxTokens: 4096
+    # One-shot first-turn quick-action guide for Flash ('' disables, custom
+    # string replaces the default): the first wave of thinking is the only
+    # one under the bootstrap budget, so guide it to act quickly instead of
+    # widening the budget forever. Injected as a near-field user message
+    # (never into the system prompt — the minimal anchor stays byte-exact),
+    # stops automatically after promotion.
+    # firstTurnGuideText: 'First turn: act now — call a tool (read a file or run a command) rather than planning at length. Detailed reasoning can come in later steps.'
 
 # ── identity ────────────────────────────────────────────────────────────────
 #

@@ -38,6 +38,8 @@ JSONL（`dsh session export <id>` 或 Web GUI 导出）。
   4096**，`bootstrapFlashMaxTokens`——flash 的 reasoning 明显更长，1024
   会令复杂任务首轮空转中断，实测见 session(3) 案例）
 - `tools.length` ≤ 3，且恰好 = 一个平台 shell（win32 上为 `pwsh`）+ `read`
+- 首轮 pre-step 消息里（Flash 会话）应有**一条** `source.kind: plugin`
+  的"快速行动"引导（`firstTurnGuideText`）；Pro 会话不应有
 - `header.system` === **`You are a helpful software engineer assistant.`**
   （minimal 句；`complete: true` 抑制了 identity/工具指南/插件说明等全部
   其它 section）——这是锚定的核心检查点

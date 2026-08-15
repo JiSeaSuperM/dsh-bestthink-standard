@@ -13,6 +13,10 @@
  *     reasoning at the same effort runs visibly longer than Pro's and the
  *     measured 1024 anchor left complex first tasks empty — see
  *     `DEFAULT_BOOTSTRAP_FLASH_MAX_TOKENS`)
+ *   - `firstTurnGuideText` (one-shot near-field quick-action guide for
+ *     Flash-family models: compress the first wave of thinking instead of
+ *     widening the budget forever; system prompt untouched, stops after
+ *     promotion — see `DEFAULT_FIRST_TURN_GUIDE`)
  *   - shared `promotionSignal()` / anchor-override exports (kept for tooling
  *     and tests).
  *
@@ -78,6 +82,19 @@ const DEFAULT_BOOTSTRAP_MAX_TOKENS = 1024
  * by default; the value stays configurable.
  */
 const DEFAULT_BOOTSTRAP_FLASH_MAX_TOKENS = 4096
+
+/**
+ * One-shot first-turn quick-action guide for Flash-family models. The FIRST
+ * wave of thinking is the only one under the bootstrap budget; flash
+ * reasoning at 'max' effort can exceed it on complex tasks (measured
+ * interruption). Instead of widening the budget forever, this fixed
+ * near-field user message (the measured strongest guidance position) guides
+ * that first wave to act quickly; detailed reasoning is deferred to later
+ * steps, which run at the session's own unlimited budget. The system prompt
+ * is never touched, so the minimal anchor stays byte-exact.
+ */
+const DEFAULT_FIRST_TURN_GUIDE =
+  'First turn: act now — call a tool (read a file or run a command) rather than planning at length. Detailed reasoning can come in later steps.'
 
 /** True when the routed model id is a Flash-family model. */
 function isFlashModel(modelId) {
@@ -161,6 +178,11 @@ export function apply(ctx, config) {
   const suppressedContextSources = new Set(
     stringListAllowEmpty(config.suppressedContextSources ?? DEFAULT_SUPPRESSED_CONTEXT_SOURCES, 'suppressedContextSources'),
   )
+  // '' disables the first-turn guide; a custom string replaces the default.
+  const firstTurnGuide = config.firstTurnGuideText === undefined
+    ? DEFAULT_FIRST_TURN_GUIDE
+    : String(config.firstTurnGuideText)
+  const guideInjected = new Set() // session ids that already got the one-shot guide
 
   /** Sessions already promoted in this process. Promotion is append-only, so a Set is sound. */
   const promoted = new Set()
@@ -253,15 +275,36 @@ export function apply(ctx, config) {
   // bootstrap. Because this listener is the first registered (see the inject
   // note and the row order in agent.cordis.yml), the strip is the final
   // waterfall transform and actually removes what later listeners inject.
+  // Also injects a one-shot first-turn quick-action guide for Flash-family
+  // models: the FIRST wave of thinking is the only one under the bootstrap
+  // budget, and flash reasoning at 'max' effort can exceed it on complex
+  // tasks (measured interruption). Instead of widening the budget forever we
+  // guide that first wave to act quickly. The guide is a fixed near-field
+  // user message (the measured strongest guidance position), never a system
+  // change — the minimal anchor stays byte-exact — and stops automatically
+  // after promotion. `firstTurnGuideText: ''` disables it; a custom string
+  // replaces the default.
   ctx.on('agent/pre-step', async (payload, next) => {
     const decision = await next()
     if (decision.kind === 'reject') return decision
     const agent = payload.agent
     if (isPromoted(agent)) return decision
-    if (suppressedContextSources.size === 0) return decision
-    return {
-      ...decision,
-      messages: decision.messages.filter((message) => !suppressedContextSources.has(message.source?.kind)),
+    let messages = decision.messages
+    if (suppressedContextSources.size > 0) {
+      messages = messages.filter((message) => !suppressedContextSources.has(message.source?.kind))
     }
+    if (firstTurnGuide !== '' && isFlashModel(agent?.options?.model)) {
+      const sessionId = agent?.session?.id
+      if (sessionId !== undefined && !guideInjected.has(sessionId)) {
+        guideInjected.add(sessionId)
+        messages = [...messages, {
+          role: 'user',
+          source: { kind: 'plugin', plugin: name },
+          content: [{ type: 'text', text: firstTurnGuide }],
+        }]
+      }
+    }
+    if (messages === decision.messages) return decision
+    return { ...decision, messages }
   })
 }
