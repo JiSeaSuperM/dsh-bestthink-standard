@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+
 /**
  * BestThink tool bootstrap — keep the FIRST model request on a small tool
  * surface and a small output budget, then expose the full preset catalog (and
@@ -279,11 +281,13 @@ export function apply(ctx, config) {
       if (sessionId !== undefined && !guideInjected.has(sessionId)) {
         guideInjected.add(sessionId)
         messages = [...messages, {
-          // The session validator requires every persisted message to carry a
-          // non-empty id ("lacks an identified message"); injected messages
-          // without one corrupt the session log (measured: session-80b3cf25 /
-          // session-7332061f failed to load after the guide was persisted).
-          id: `bestthink-guide-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          // Message ids match the harness's own convention: every injected
+          // message created through dsh-llm's createMessage gets
+          // crypto.randomUUID() (uuid v4). The session validator only
+          // requires a non-empty id, but using the same uuid v4 format keeps
+          // our injected messages indistinguishable from harness-injected
+          // ones (agent-instructions / skill-catalog / runtime context).
+          id: randomUUID(),
           role: 'user',
           source: { kind: 'plugin', plugin: name },
           content: [{ type: 'text', text: firstTurnGuide }],
