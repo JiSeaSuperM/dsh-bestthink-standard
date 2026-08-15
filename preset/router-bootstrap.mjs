@@ -10,6 +10,15 @@
  *   - FIX: promotion now uses the shared `promotionSignal()` from
  *     tool-bootstrap.mjs with the SAME `promoteOn` config, so the router and
  *     the anchor never disagree (upstream router only watched `tool/call`).
+ *   - FIX (anchor purity, 2026-08-16): during the bootstrap phase the
+ *     assembled sections are replaced with ONLY the router persona (plus
+ *     plan:policy, empty outside plan mode) instead of keeping the full
+ *     Standard section stack. The minimal preset's `complete: true` restores
+ *     a single section after assembly, which is what makes the first request
+ *     RL-aligned; a persona-routing preset cannot use `complete`, so this
+ *     enforces the same shape at the waterfall. Diagnosed via session JSONL:
+ *     the first request carried harness identity + workspace instructions +
+ *     tool guidance + plugin sections (~4k chars), which destroyed the anchor.
  *   - CHANGE: after promotion the assembled `contexts` are KEPT (upstream
  *     cleared them forever) — the promoted phase is the full Standard
  *     experience, workspace context restored. Only the bootstrap phase
@@ -87,15 +96,24 @@ export function apply(ctx, config) {
     const modelId = agent.options?.model
     const persona = personaFor(mode, modelId)
 
-    // The persona stays constant for the whole session (mode is fixed); only
-    // the tool surface changes once, after the first durable promotion signal.
-    const sections = applyPersona(assembled.sections, persona)
-
     if (hasPromotionSignal(session)) {
-      // Promoted: full catalog and full contexts — only the persona section
+      // Promoted: full catalog and full contexts; only the persona section
       // differs from the un-bootstrapped Standard assembly.
-      return { ...assembled, sections }
+      return { ...assembled, sections: applyPersona(assembled.sections, persona) }
     }
+
+    // Bootstrap: the RL-aligned first-request anchor needs a MINIMAL system
+    // prompt, not the Standard stack (harness identity, workspace
+    // instructions, tool guidance, plugin sections — see DIAGNOSIS: the
+    // minimal preset achieves this with `complete: true`, which restores a
+    // single section after assembly; a persona-routing preset cannot use
+    // `complete`, so we enforce the same shape here). Keep ONLY the router
+    // persona, plus plan:policy — whose text is empty outside plan mode and
+    // renders to nothing — so a plan-mode first request keeps its policy.
+    const bootstrapSections = [
+      { name: 'router-persona', text: persona, order: 0 },
+      ...assembled.sections.filter((section) => section.name === 'plan:policy'),
+    ]
 
     const core = new Set(coreFor(mode))
     const available = new Set(assembled.tools.map((tool) => tool.name))
@@ -107,7 +125,7 @@ export function apply(ctx, config) {
 
     return {
       ...assembled,
-      sections,
+      sections: bootstrapSections,
       contexts: [], // bootstrap phase: no dynamic contexts (time/workspace/...)
       tools: assembled.tools.filter((tool) => core.has(tool.name)),
     }

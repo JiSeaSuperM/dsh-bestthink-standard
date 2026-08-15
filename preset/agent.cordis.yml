@@ -65,8 +65,13 @@
 # section and the first-turn core tool set (spec: read/edit/glob/grep +
 # shell; react: read/write/edit + shell; weak: model-routes itself), and in
 # weak mode appends one fixed near-field guidance message after every real
-# user message. After the first durable promotion signal the full catalog and
-# full contexts return. `mode: auto` classifies per task; a fixed band name
+# user message. During the bootstrap phase the assembled sections are
+# replaced with ONLY the router persona (plus plan:policy, empty outside plan
+# mode) — the minimal-preset `complete` shape, so the first request is
+# RL-aligned instead of carrying identity/instructions/tool-guidance/plugin
+# sections (see router-bootstrap.mjs "anchor purity"). After the first
+# durable promotion signal the full catalog, the full sections, and the full
+# contexts return. `mode: auto` classifies per task; a fixed band name
 # (spec / weak / mixed / react) pins every session instead. `promoteOn` must
 # mirror row 1 so both plugins agree on the promotion phase. See
 # router-bootstrap.mjs / router-core.mjs.
@@ -79,9 +84,10 @@
 # ── identity ────────────────────────────────────────────────────────────────
 #
 # NOTE: the official `standard` persona row is intentionally absent. The
-# router injects the mode-matched persona section (router-persona) and the
-# plan-mode section below must survive it (applyPersona replaces only
-# persona-named sections).
+# router injects the mode-matched persona section (router-persona); during
+# bootstrap it is the ONLY section (plus plan:policy, empty outside plan
+# mode), after promotion the full section stack returns with the persona
+# replaced. See router-bootstrap.mjs.
 
 - id: agent-instructions
   name: '@deepseek-ai/dsh-agent-instructions'
@@ -156,8 +162,11 @@
 # ── plan mode ───────────────────────────────────────────────────────────────
 
 # Plan state is per-agent by nature, so an entry-local realm is not a
-# workaround here — it is the correct lifetime. The router's applyPersona
-# keeps this section (it only replaces persona-named sections).
+# workaround here — it is the correct lifetime. The router keeps this
+# section: during bootstrap it is carried alongside the router persona (its
+# text is empty outside plan mode and renders to nothing), and after
+# promotion applyPersona preserves it (it only replaces persona-named
+# sections).
 - id: planning
   name: cordis:group
   group: true

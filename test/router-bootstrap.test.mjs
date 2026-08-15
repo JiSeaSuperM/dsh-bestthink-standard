@@ -56,7 +56,7 @@ function assemble(listener, events, opts = {}) {
       sections: sections ?? [
         { name: 'harness-identity', text: 'identity', order: -100 },
         { name: 'persona', text: 'fallback persona', order: 0 },
-        { name: 'plan-mode', text: 'You are in plan mode.', order: -50 },
+        { name: 'plan:policy', text: '', order: 50 },
       ],
       contexts: contexts ?? [{ name: 'time-context', text: 'now' }],
       tools,
@@ -78,8 +78,14 @@ test('spec task: spec persona, read-first core + shell, no contexts while bootst
   const { listeners } = register()
   const result = await assemble(listeners['system-prompt/assemble'], [userEvent('修复这个仓库里的 bug')])
   assert.equal(result.sections.find((s) => s.name === 'router-persona').text, 'You are a helpful software engineer assistant.')
-  assert.ok(result.sections.some((s) => s.name === 'plan-mode'), 'plan-mode section survives')
+  // anchor purity: bootstrap keeps ONLY the router persona (+ plan:policy,
+  // whose text is empty outside plan mode and renders to nothing); identity,
+  // fallback persona, and other sections are stripped — the minimal-preset
+  // `complete` shape (see DIAGNOSIS: anchor purity fix).
+  assert.equal(result.sections.length, 2, 'bootstrap keeps only router-persona + plan:policy')
+  assert.ok(result.sections.some((s) => s.name === 'plan:policy'), 'plan:policy kept during bootstrap')
   assert.ok(!result.sections.some((s) => s.name === 'persona'), 'fallback persona replaced')
+  assert.ok(!result.sections.some((s) => s.name === 'harness-identity'), 'harness identity stripped during bootstrap')
   assert.deepEqual(names(result.tools), ['read', 'edit', 'glob', 'grep', 'pwsh'])
   assert.deepEqual(result.contexts, [])
 })
