@@ -74,7 +74,7 @@ const DEFAULT_BOOTSTRAP_MAX_TOKENS = 1024
  * One-shot first-turn quick-action guide (all models). The FIRST wave of
  * thinking is the only one under the bootstrap budget; a complex first task
  * can blow past it and end the first step empty (measured interruption:
- * session(3) flash 1852 chars, pro黑洞2 pro 2329 chars). This fixed
+ * flash 1852 chars / pro 2329 chars on the same task). This fixed
  * near-field user message (the measured strongest guidance position) guides
  * that first wave to act quickly; detailed reasoning is deferred to later
  * steps, which run at the session's own unlimited budget. The system prompt

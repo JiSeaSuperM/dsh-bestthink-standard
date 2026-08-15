@@ -1,130 +1,88 @@
-# dsh-bestthink-standard（最佳思维链标准模式，BTS）
+# dsh-bestthink-standard
 
-DeepSeek Harness（DSH）agent preset：**首轮无条件进入 minimal 极简模式的
-RL 对齐思维链（实测最佳思维链），首次工具调用后自动晋升为完整 Standard
-25 工具 + 工作区上下文恢复**，全程 system prompt 不变、可验证。
+**[English](README.md) | [中文](README.zh-CN.md)**
 
-> 兼容基线：DeepSeek Harness **0.1.0-rc.5 / 提交 47f9438**（本机 checkout）。
-> 许可：MIT；移植自 `xiaobright/dsh-anchored-standard`（MIT），
-> `agent.cordis.yml` 基于官方 standard preset 修改（见 `preset/NOTICE`）。
+**Best-Thinking + Standard mode** — a [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) agent preset that enters the *measured best-thinking trajectory* (the RL-aligned minimal condition) on the very first request, then auto-promotes to the **full Standard 25-tool catalog** with workspace context restored.
 
-## 原理（一句话）
+> Compatible baseline: DeepSeek Harness **0.1.0-rc.5 / commit 47f9438**.
+> License: MIT (ported from `xiaobright/dsh-anchored-standard`; `agent.cordis.yml` derives from the official `standard` preset — see [`preset/NOTICE`](preset/NOTICE)).
 
-DeepSeek V4 Pro 的行为被「首轮请求的完整 system prompt + 工具 schema 分布」
-强条件化。Project2 实测：**minimal（1 句 prompt + 2 工具）99/96，两阶段锚定
-98/99，standard 91** —— 首轮落入 minimal 对齐形态就是最佳思维链。BTS 用
-**锚定三因子**把它无条件锁进首轮：
+---
 
-1. **system 纯净**：persona 行 = minimal 句（`complete: true`），组装后
-   system 仅有这一句话（identity/工具指南/插件说明全部被抑制）
-2. **输出预算**：首轮 `maxTokens=1024`（统一预算，不区分模型——避免会话
-   中途切换模型时预算错配；晋升后显式剥离，防泄漏）
-3. **窄工具面 + 剥离注入**：首轮仅 shell + `read`；剥离 skill-catalog /
-   AGENTS.md 注入消息
+## Why
 
-**第一波引导（所有模型）**：第一波思考是唯一受预算限制的一波，复杂任务
-的 reasoning 会撞破 1024 导致首轮空转中断（实测 session(3)）。首轮注入
-一条固定的"快速行动"近场引导（system 不变，晋升后自动停止）——第一波
-想太多是中断的唯一来源，引导它直接动手，第二波起完全放开。
+A frontier reasoning model's behavior is strongly conditioned by the **first request's system prompt and visible tool catalog** — not by its raw capability. Measured on the Project2 maintenance benchmark (DeepSeek V4 Pro, `reasoning_effort=max`):
 
-首次 `tool/call` 或 `assistant/message`（`promoteOn: either`）后自动晋升：
-全量工具、正常预算、AGENTS.md/技能目录自然恢复。**不做任何工具包装抽象**
-（PTC 教训）。
+| Condition | Ability |
+|---|---:|
+| official `minimal` (1-sentence prompt, 2 tools) | **99 / 96** |
+| **two-phase anchored** (minimal first, full catalog after first tool call) | **98 / 99** |
+| official `standard` (full 25-tool catalog from the start) | 91 |
 
-> 演进记录：曾尝试 router-standard 的任务路由（spec/react/weak 三带 persona
-> 选择），实测失败已移除——分类器在 assemble 时机读不到首条用户消息
-> （user/message 事件在 pre-step 瀑布后才持久化），首轮永远落 weak 长文本
-> persona，诱导 reasoning 膨胀撞破 1024 预算导致首轮空转中断。最小即最优。
+The first request commits the session to a trajectory; expanding the tool catalog *after* the first durable tool call perturbs at most one reasoning block and never flips the mode. So the anchor is free: you get the best-thinking first turn **and** the full Standard capability.
 
-## 目录结构
+## How it works
 
-```
-dsh-bestthink-standard/
-├── preset/
-│   ├── agent.cordis.yml       # 核心组装（standard 底稿 + minimal persona 行 + bootstrap 行）
-│   ├── preset.yml             # 元数据（name/description）
-│   ├── tool-bootstrap.mjs     # 锚定插件（anchored-standard 移植）
-│   └── NOTICE                 # 上游 MIT 声明（anchored-standard + 官方 standard）
-├── test/                      # node --test 单测
-├── scripts/trace-stats.mjs    # 轨迹指纹统计
-├── docs/VERIFICATION.md       # 验证步骤（JSONL 检查点）
-└── package.json
-```
+Three anchoring factors lock the first request into the RL-aligned minimal form, **uniformly for every model** (no per-model special-casing — sessions that switch models mid-flight can never receive mismatched settings):
 
-## 安装
+1. **Pristine system prompt** — the persona row is the minimal sentence with `complete: true` + `includeRuntimeContext: false`, so the assembled system prompt is *exactly* `You are a helpful software engineer assistant.` (harness identity, tool guidance, and plugin sections are all suppressed).
+2. **Tight output budget** — the first request is capped at `maxTokens=1024` (the measured anchor value); the cap is explicitly stripped after promotion so it can never leak into later steps.
+3. **Narrow tool surface + stripped injections** — the first request sees only `shell + read`; skill-catalog / AGENTS.md injected messages are filtered out during bootstrap and naturally return after promotion.
 
-1. 复制 `preset/` 目录到用户预设根：
+**First-turn quick-action guide** — the first wave of thinking is the *only* wave under the bootstrap budget, and a complex task's reasoning can blow past 1024 and end the first step empty. A fixed near-field user message (the strongest measured guidance position) is injected once on the first turn — *hard-forbidding* first-turn design reasoning — and stops automatically after promotion:
 
-   ```powershell
-   Copy-Item -Recurse D:\software\jzpProject\dsh-bestthink-standard\preset `
-     $HOME\.dsh\.agent-presets\bestthink-standard
-   ```
+> *First turn: call exactly one tool NOW (read a file or run a command). Do NOT design, plan, or analyze in this turn — no architecture, no implementation details. All design and planning happens in later steps, after the tool result.*
 
-2. 重启 DSH 进程（预设只在启动时扫描）。
-3. 新会话选择「最佳思维链标准模式」（preset.yml 的 name）。
+**Promotion** — after the first durable `tool/call` or `assistant/message` (`promoteOn: either`), the full Standard catalog, the normal output budget, and the workspace context (AGENTS.md / skill catalog) all return. The system prompt never changes again (at most one prefix-cache miss).
 
-> 安装目录名 `bestthink-standard` 即 preset id；也可改名，但必须与
-> `preset.yml` 内容无关（id 取自目录名）。
+No tool-wrapping abstractions (the official `code` preset's `run_code` layer measured *worse*: 92 vs 91-99, plus a new failure surface).
 
-## 使用
-
-- **首轮**：minimal 思维链（system = 仅 `You are a helpful software engineer
-  assistant.`，工具 = shell + read，maxTokens = 1024，无任何注入）
-- **晋升**：首次工具调用或首条助手消息后，全量 Standard 工具目录 + 完整
-  输出预算 + AGENTS.md/技能目录自然恢复；system prompt 不再变化
-- **验证**：导出会话 JSONL，首份 header 的 system 应为**仅 minimal 句**
-  （<100 字符），工具 ≤ 2，maxTokens=1024；晋升后全量工具、无 1024 残留
-
-## 验证
-
-三步（详见 `docs/VERIFICATION.md`）：
-
-1. **单测**：`node --test`（Node ≥ 18）
-2. **结构**：导出会话 JSONL，检查首份 header（system 仅 minimal 句、
-   maxTokens=1024、工具 ≤2、无注入消息）与晋升后 header（全量工具、
-   无 1024 残留、注入恢复）
-3. **轨迹**：`node scripts/trace-stats.mjs <session.jsonl>` ——
-   目标 `let me`≈0、`we` 占优、阶段回复=1（英文轨迹；中文会话参考首轮
-   reasoning 块长：minimal 锚定下首块应短而直接）
-
-## 配置面
-
-| 位置 | 键 | 默认 | 说明 |
-|---|---|---|---|
-| tool-bootstrap 行 | `shellTools` | `[bash, pwsh]` | 候选平台 shell |
-| | `commonTools` | `[read]` | 首轮核心工具 |
-| | `promoteOn` | `either` | `tool-call` / `assistant-message` / `either` |
-| | `bootstrapMaxTokens` | `1024` | 首轮输出预算（统一，晋升后显式剥离） |
-| | `firstTurnGuideText` | 内置文案 | 首轮"快速行动"引导（`''` 禁用，自定义文本可替换；近场消息注入，system 不变，晋升后停止） |
-| | `suppressedContextSources` | `[skill-catalog, agent-instructions]` | 首轮剥离的消息源；空数组禁用剥离 |
-| persona 行 | `text` | minimal 句 | 建议保持 minimal 句（实测最佳思维链） |
-| | `complete` | `true` | system 仅此一段（锚定的核心） |
-| | `includeRuntimeContext` | `false` | 抑制运行时上下文快照 |
-
-## 移植说明与 rc.5 适配（重要）
-
-- **来源**：`xiaobright/dsh-anchored-standard`（MIT）→ `tool-bootstrap.mjs`
-  与 persona 行（minimal 句 + complete）；`agent.cordis.yml` 基于官方
-  standard（rc.5 / 47f9438）修改。NOTICE 见 `preset/NOTICE`。
-- **本仓库新增**（相对 anchored-standard）：
-  1. `suppressedContextSources` 配置（空数组可禁用剥离）
-  2. `promotionSignal()` / anchor override 导出（工具化，纯函数）
-  3. 临时 `off` 锚定 override 不入 append-only promoted 记忆集（可逆）
-- **行序铁律**：`tool-bootstrap` 行必须在 `agent.cordis.yml` **第一**且插件
-  `inject: []`（waterfall 逆序 → 剥离是最后一个 transform）。
-- **缓存铁律**：system 前缀任何动态变化都会导致全量缓存 miss——persona
-  固定 minimal 句、全程不变；动态内容（AGENTS.md/技能目录）只走消息侧且
-  晋升后才注入，首轮→晋升有且仅有一次目录变化。
-
-## 开发
+## Install
 
 ```powershell
-npm test                    # node --test test/
-node scripts/trace-stats.mjs test/fixtures/trace-sample.jsonl   # 脚本自测
+# 1. copy the preset directory into your user preset root
+Copy-Item -Recurse <repo>\preset $HOME\.dsh\.agent-presets\bestthink-standard
+
+# 2. restart DeepSeek Harness (presets are scanned at startup)
+# 3. start a NEW session and pick 「最佳思维链标准模式」 (the preset.yml name)
 ```
 
-## 已知限制
+> The install directory name (`bestthink-standard`) is the preset id.
 
-- 轨迹收益以 v4-pro 实测为准（anchored 98/99 vs standard 91）；Flash 的
-  锚定收益未在本机复测，但首轮 system 纯净可消除「提示冗长 + 工具少」的
-  错配，中断类问题（reasoning 撞预算）应随之消失。
+## Usage
+
+- **First turn**: minimal best-thinking trajectory (1-sentence system, `shell + read`, 1024 budget, no injected context, one quick-action guide).
+- **After promotion**: full Standard 25-tool catalog, normal budget, AGENTS.md / skill catalog restored.
+- **No special prompts needed** — the minimal sentence is injected by the preset, not something you type.
+
+## Configuration
+
+| Key | Default | Meaning |
+|---|---|---|
+| `shellTools` | `[bash, pwsh]` | candidate platform shells |
+| `commonTools` | `[read]` | first-turn core tool |
+| `promoteOn` | `either` | `tool-call` / `assistant-message` / `either` |
+| `bootstrapMaxTokens` | `1024` | first-request output budget (explicitly stripped after promotion) |
+| `firstTurnGuideText` | built-in | first-turn quick-action guide (`''` disables; a custom string replaces the default) |
+| `suppressedContextSources` | `[skill-catalog, agent-instructions]` | injected message kinds stripped during bootstrap (`[]` disables) |
+
+## Verification
+
+1. **Unit tests**: `node --test` (Node ≥ 18) — promotion modes, maxTokens cap/release, injection strip/release, guide one-shot behavior.
+2. **Structure** (export a session JSONL): first `request/header` must show `maxTokens=1024`, ≤2 tools (`shell` + `read`), system = exactly the minimal sentence, and one `source.kind: plugin` guide message; after the first tool call the header must show the full catalog with no `1024` residue.
+3. **Trajectory** (`node scripts/trace-stats.mjs <session.jsonl>`): English reasoning traces should show `we`-dominant, `let me` ≈ 0, and a single visible reply per turn (the minimal-trajectory fingerprint).
+
+## Development history
+
+- The first version included a task-router (spec/react/weak persona selection, ported from `dsh-router-standard`). It was removed after measurement: the classifier cannot see the first user message at assembly time (`user/message` events persist only after the `agent/pre-step` waterfall, while `system-prompt/assemble` runs before it), so first requests always fell into the weak persona whose long guidance text inflated first-turn reasoning past the 1024 budget — empty first steps. **Minimal is the optimum**: one unconditional anchor, no routing.
+- The bootstrap budget was briefly made model-adaptive, then unified back to 1024: `agent.options.model` is snapshotted at session creation, so GUI model switching produces a stale snapshot; any per-model logic risks mismatched budgets/guides. One uniform setting is immune.
+
+## License & acknowledgements
+
+MIT. This project ports and composes:
+
+- [`xiaobright/dsh-anchored-standard`](https://github.com/xiaobright/dsh-anchored-standard) (MIT) → `tool-bootstrap.mjs` mechanics and the minimal persona row
+- [`yjh051108/dsh-router-standard`](https://github.com/yjh051108/dsh-router-standard) (MIT) → measurement methodology and the near-field guidance insight (no code retained)
+- official DeepSeek Harness `standard` preset (rc.5 / 47f9438) → base composition
+
+See [`preset/NOTICE`](preset/NOTICE) for full attribution. Project2 measurements come from [`xiaobright/modeltest`](https://github.com/xiaobright/modeltest) (V4.1b, frozen). Not affiliated with DeepSeek; measurements are environment-specific and not a general benchmark.

@@ -1,8 +1,8 @@
 dsh-bestthink-standard
 ======================
 
-This project is a port and composition of two upstream MIT-licensed research
-presets for DeepSeek Harness, plus the official `standard` agent preset as a
+This project is a port and composition of an upstream MIT-licensed research
+preset for DeepSeek Harness, plus the official `standard` agent preset as a
 base composition. The MIT license of this project covers the new composition,
 the extensions, and the fixes added on top of the ported files; the ported
 code and the official base retain their original copyrights below.
@@ -16,16 +16,19 @@ Ported sources (MIT)
    Repository: https://github.com/xiaobright/dsh-anchored-standard
    License: MIT
    Ported files:
-     - preset/tool-bootstrap.mjs
+     - preset/tool-bootstrap.mjs (mechanisms and configuration names;
+       extended with the first-turn quick-action guide, configurable
+       suppressed-context sources, and promotionSignal exports)
 
 2. `dsh-router-standard` — task-aware reasoning-mode routing
-   (spec/react/weak behavior bands, persona selection, first-turn core tool
-   set, weak-mode near-field guidance, dev_* self-optimization tools).
+   (spec/react/weak behavior bands, persona selection, near-field guidance).
    Repository: https://github.com/yjh051108/dsh-router-standard
    License: MIT
-   Ported files:
-     - preset/router-core.mjs
-     - preset/router-bootstrap.mjs
+   Status: the task-router implementation was ported, measured, and removed
+   (see README "Development history"); no code from this repository is
+   retained. Its near-field guidance insight (a fixed message injected right
+   after the user message, never into the system prompt) influenced the
+   first-turn quick-action guide wording and placement.
 
 Official DeepSeek Harness base (see repository license)
 --------------------------------------------------------
@@ -33,9 +36,10 @@ Official DeepSeek Harness base (see repository license)
 `preset/agent.cordis.yml` is derived from the official `standard` agent
 preset shipped with DeepSeek Harness 0.1.0-rc.5 / commit 47f9438
 (https://github.com/deepseek-ai/deepseek-harness), with the persona row
-removed (the router plugin injects the mode-specific persona section) and
-the two bootstrap rows prepended. The official copyright and license of the
-DeepSeek Harness repository apply to the derived rows.
+replaced by the minimal-aligned row (`complete: true` +
+`includeRuntimeContext: false`) and the bootstrap row prepended. The
+official copyright and license of the DeepSeek Harness repository apply to
+the derived rows.
 
 All ported files retain their original comments and configuration names so
 upstream diffs stay readable.

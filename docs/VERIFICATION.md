@@ -8,8 +8,8 @@
 ## 1. 单测（自动化，必须全绿）
 
 ```powershell
-cd D:\software\jzpProject\dsh-bestthink-standard
-node --test          # 或 npm test
+cd <repo-root>          # 本仓库克隆目录
+node --test             # 或 npm test
 ```
 
 覆盖：
