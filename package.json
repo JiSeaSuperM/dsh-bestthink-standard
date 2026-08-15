@@ -1,0 +1,15 @@
+{
+  "name": "dsh-bestthink-standard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Best-Thinking-Standard agent preset for DeepSeek Harness: first-turn RL-aligned trajectory anchor (spec/react stable band) that auto-promotes to the full Standard 25-tool catalog.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/",
+    "trace-stats": "node scripts/trace-stats.mjs"
+  }
+}

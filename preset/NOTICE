@@ -1,0 +1,41 @@
+dsh-bestthink-standard
+======================
+
+This project is a port and composition of two upstream MIT-licensed research
+presets for DeepSeek Harness, plus the official `standard` agent preset as a
+base composition. The MIT license of this project covers the new composition,
+the extensions, and the fixes added on top of the ported files; the ported
+code and the official base retain their original copyrights below.
+
+Ported sources (MIT)
+--------------------
+
+1. `dsh-anchored-standard` — first-turn trajectory anchoring
+   (first-request tool-surface narrowing, output-budget cap and release,
+   injected-context stripping).
+   Repository: https://github.com/xiaobright/dsh-anchored-standard
+   License: MIT
+   Ported files:
+     - preset/tool-bootstrap.mjs
+
+2. `dsh-router-standard` — task-aware reasoning-mode routing
+   (spec/react/weak behavior bands, persona selection, first-turn core tool
+   set, weak-mode near-field guidance, dev_* self-optimization tools).
+   Repository: https://github.com/yjh051108/dsh-router-standard
+   License: MIT
+   Ported files:
+     - preset/router-core.mjs
+     - preset/router-bootstrap.mjs
+
+Official DeepSeek Harness base (see repository license)
+--------------------------------------------------------
+
+`preset/agent.cordis.yml` is derived from the official `standard` agent
+preset shipped with DeepSeek Harness 0.1.0-rc.5 / commit 47f9438
+(https://github.com/deepseek-ai/deepseek-harness), with the persona row
+removed (the router plugin injects the mode-specific persona section) and
+the two bootstrap rows prepended. The official copyright and license of the
+DeepSeek Harness repository apply to the derived rows.
+
+All ported files retain their original comments and configuration names so
+upstream diffs stay readable.
