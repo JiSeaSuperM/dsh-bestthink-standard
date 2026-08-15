@@ -164,7 +164,10 @@ export function apply(ctx, config) {
     if (promoted.has(session.id)) return true
     const mode = anchorOverrides.get(session.id) ?? promoteOn
     const hit = promotionSignal(session.events, mode)
-    if (hit) promoted.add(session.id)
+    // A real promotion signal is append-only and memoized; the temporary
+    // 'off' override must NOT be memoized, or clearing it could not restore
+    // the bootstrap phase for a session that never actually promoted.
+    if (hit && mode !== 'off') promoted.add(session.id)
     return hit
   }
 

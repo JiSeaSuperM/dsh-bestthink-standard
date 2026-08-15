@@ -4,8 +4,9 @@
  *
  * Ported from `yjh051108/dsh-router-standard` (MIT) — see NOTICE. Original
  * comments and behavior are preserved; this port fixes and extends:
- *   - FIX: `extractText` was called but not imported upstream (ReferenceError
- *     on every real weak-mode user message) — now imported from router-core.
+ *   - FIX: `extractText` and `bandOf` were used but not imported upstream
+ *     (ReferenceError on every real weak-mode user message) — now imported
+ *     from router-core.
  *   - FIX: promotion now uses the shared `promotionSignal()` from
  *     tool-bootstrap.mjs with the SAME `promoteOn` config, so the router and
  *     the anchor never disagree (upstream router only watched `tool/call`).
@@ -34,7 +35,7 @@
  */
 
 import {
-  applyPersona, bandFor, coreFor, parseMode, personaFor, sessionMode, testinessFor, clamp01,
+  applyPersona, bandFor, bandOf, coreFor, parseMode, personaFor, sessionMode, testinessFor, clamp01,
   isComplexTask, extractText,
 } from './router-core.mjs'
 import { promotionSignal, setAnchorOverride, clearAnchorOverride } from './tool-bootstrap.mjs'
