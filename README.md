@@ -17,16 +17,15 @@ DeepSeek V4 Pro 的行为被「首轮请求的完整 system prompt + 工具 sche
 
 1. **system 纯净**：persona 行 = minimal 句（`complete: true`），组装后
    system 仅有这一句话（identity/工具指南/插件说明全部被抑制）
-2. **输出预算**：首轮 `maxTokens=1024`（Pro 实测锚定值；**Flash 模型自动
-   提高到 4096**——flash 的 reasoning 明显更长，1024 会令复杂任务首轮
-   reasoning 撞预算 → 空转中断；晋升后显式剥离，防泄漏）
+2. **输出预算**：首轮 `maxTokens=1024`（统一预算，不区分模型——避免会话
+   中途切换模型时预算错配；晋升后显式剥离，防泄漏）
 3. **窄工具面 + 剥离注入**：首轮仅 shell + `read`；剥离 skill-catalog /
    AGENTS.md 注入消息
 
-**第一波引导（Flash）**：第一波思考是唯一受预算限制的一波，所以除放宽
-预算外，还向首轮注入一条固定的"快速行动"近场引导（Flash 专属；system
-不变，晋升后自动停止）——第一波想太多是中断的唯一来源，引导它直接动手，
-第二波起完全放开。
+**第一波引导（所有模型）**：第一波思考是唯一受预算限制的一波，复杂任务
+的 reasoning 会撞破 1024 导致首轮空转中断（实测 session(3)）。首轮注入
+一条固定的"快速行动"近场引导（system 不变，晋升后自动停止）——第一波
+想太多是中断的唯一来源，引导它直接动手，第二波起完全放开。
 
 首次 `tool/call` 或 `assistant/message`（`promoteOn: either`）后自动晋升：
 全量工具、正常预算、AGENTS.md/技能目录自然恢复。**不做任何工具包装抽象**
@@ -95,9 +94,8 @@ dsh-bestthink-standard/
 | tool-bootstrap 行 | `shellTools` | `[bash, pwsh]` | 候选平台 shell |
 | | `commonTools` | `[read]` | 首轮核心工具 |
 | | `promoteOn` | `either` | `tool-call` / `assistant-message` / `either` |
-| | `bootstrapMaxTokens` | `1024` | Pro 首轮输出预算（晋升后显式剥离） |
-| | `bootstrapFlashMaxTokens` | `4096` | Flash 系模型首轮预算（防 reasoning 撞预算中断） |
-| | `firstTurnGuideText` | 内置文案 | Flash 首轮"快速行动"引导（`''` 禁用，自定义文本可替换；近场消息注入，system 不变，晋升后停止） |
+| | `bootstrapMaxTokens` | `1024` | 首轮输出预算（统一，晋升后显式剥离） |
+| | `firstTurnGuideText` | 内置文案 | 首轮"快速行动"引导（`''` 禁用，自定义文本可替换；近场消息注入，system 不变，晋升后停止） |
 | | `suppressedContextSources` | `[skill-catalog, agent-instructions]` | 首轮剥离的消息源；空数组禁用剥离 |
 | persona 行 | `text` | minimal 句 | 建议保持 minimal 句（实测最佳思维链） |
 | | `complete` | `true` | system 仅此一段（锚定的核心） |

@@ -34,12 +34,10 @@ JSONL（`dsh session export <id>` 或 Web GUI 导出）。
 { "header": { "config": { "maxTokens": 1024 }, "tools": [ ... ] } }
 ```
 
-- `config.maxTokens` === 1024（`bootstrapMaxTokens`；**Flash 系模型为
-  4096**，`bootstrapFlashMaxTokens`——flash 的 reasoning 明显更长，1024
-  会令复杂任务首轮空转中断，实测见 session(3) 案例）
+- `config.maxTokens` === 1024（`bootstrapMaxTokens`，统一预算不区分模型）
 - `tools.length` ≤ 3，且恰好 = 一个平台 shell（win32 上为 `pwsh`）+ `read`
-- 首轮 pre-step 消息里（Flash 会话）应有**一条** `source.kind: plugin`
-  的"快速行动"引导（`firstTurnGuideText`）；Pro 会话不应有
+- 首轮 pre-step 消息里应有**一条** `source.kind: plugin` 的"快速行动"
+  引导（`firstTurnGuideText`，所有模型统一）
 - `header.system` === **`You are a helpful software engineer assistant.`**
   （minimal 句；`complete: true` 抑制了 identity/工具指南/插件说明等全部
   其它 section）——这是锚定的核心检查点
@@ -49,7 +47,7 @@ JSONL（`dsh session export <id>` 或 Web GUI 导出）。
 ### 检查点 B — 首次 `tool/call` 后的下一份变更 `request/header`（晋升生效）
 
 - 工具全量（25 个左右，与官方 standard 一致）
-- `config.maxTokens` **无 1024/4096 残留**（剥离生效；若残留说明泄漏，检查
+- `config.maxTokens` **无 1024 残留**（剥离生效；若残留说明泄漏，检查
   `agent/request` 的剥离分支）
 - 后续 pre-step：AGENTS.md / 技能目录消息**重新出现**（注入自然放行）
 

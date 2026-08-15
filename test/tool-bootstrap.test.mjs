@@ -6,6 +6,10 @@ import { apply, name, promotionSignal, setAnchorOverride, clearAnchorOverride } 
 const config = {
   commonTools: ['read'],
   shellTools: ['bash', 'pwsh'],
+  // The default one-shot guide is exercised by its own tests below; the
+  // strip/promotion tests here disable it so they assert exactly the
+  // context-filter contract.
+  firstTurnGuideText: '',
 }
 
 function register(cfg = config) {
@@ -46,6 +50,43 @@ const instructionMessage = { id: 'i', content: [], source: { kind: 'agent-instru
 const catalogMessage = { id: 'c', content: [], source: { kind: 'skill-catalog' } }
 const gestureMessage = { id: 'g', content: [], source: { kind: 'skill-invocation' } }
 const pluginMessage = { id: 'p', content: [], source: { kind: 'plugin' } }
+
+// ── first-turn quick-action guide (all models, one-shot) ────────────────────
+
+test('default guide is injected once for every model during bootstrap', async () => {
+  const { listeners } = register({ ...config, firstTurnGuideText: undefined })
+  for (const model of ['deepseek-v4-pro', 'deepseek-v4-flash']) {
+    const decision = await prestep(listeners['agent/pre-step'], [], [userMessage], 's-' + model)
+    const guides = decision.messages.filter((message) => message.source?.kind === 'plugin' && message.source?.plugin === name)
+    assert.equal(guides.length, 1, `${model}: one guide`)
+    assert.ok(guides[0].content[0].text.includes('act now'), `${model}: default text`)
+  }
+})
+
+test('guide is injected exactly once per session', async () => {
+  const { listeners } = register({ ...config, firstTurnGuideText: undefined })
+  const first = await prestep(listeners['agent/pre-step'], [], [userMessage], 'once')
+  const second = await prestep(listeners['agent/pre-step'], [], [userMessage], 'once')
+  const guides = (m) => m.messages.filter((message) => message.source?.kind === 'plugin' && message.source?.plugin === name).length
+  assert.equal(guides(first), 1, 'injected on the first bootstrap step')
+  assert.equal(guides(second), 0, 'no duplicate on a later bootstrap step (the first guide already sits in the session context)')
+})
+
+test('guide stops after promotion and never touches the system prompt', async () => {
+  const { listeners } = register({ ...config, firstTurnGuideText: undefined })
+  const decision = await prestep(listeners['agent/pre-step'], [{ type: 'tool/call' }], [userMessage])
+  assert.ok(!decision.messages.some((message) => message.source?.kind === 'plugin' && message.source?.plugin === name))
+})
+
+test('custom guide text replaces the default; empty string disables', async () => {
+  const custom = register({ ...config, firstTurnGuideText: '直接干！' })
+  const customDecision = await prestep(custom.listeners['agent/pre-step'], [], [userMessage], 'custom')
+  const customGuide = customDecision.messages.find((message) => message.source?.kind === 'plugin' && message.source?.plugin === name)
+  assert.equal(customGuide.content[0].text, '直接干！')
+  const disabled = register({ ...config, firstTurnGuideText: '' })
+  const disabledDecision = await prestep(disabled.listeners['agent/pre-step'], [], [userMessage], 'disabled')
+  assert.ok(!disabledDecision.messages.some((message) => message.source?.kind === 'plugin' && message.source?.plugin === name))
+})
 
 test('exports a diagnostic plugin name', () => {
   assert.equal(name, 'bestthink-tool-bootstrap')

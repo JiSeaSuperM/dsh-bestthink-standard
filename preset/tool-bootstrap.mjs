@@ -8,15 +8,10 @@
  * original comments, logic, and configuration names are preserved so upstream
  * diffs stay readable; this port adds:
  *   - `suppressedContextSources` (configurable strip list, empty = disabled)
- *   - `bootstrapFlashMaxTokens` (model-adaptive first-request budget:
- *     Flash-family models get a larger cap, default 4096, because their
- *     reasoning at the same effort runs visibly longer than Pro's and the
- *     measured 1024 anchor left complex first tasks empty — see
- *     `DEFAULT_BOOTSTRAP_FLASH_MAX_TOKENS`)
- *   - `firstTurnGuideText` (one-shot near-field quick-action guide for
- *     Flash-family models: compress the first wave of thinking instead of
- *     widening the budget forever; system prompt untouched, stops after
- *     promotion — see `DEFAULT_FIRST_TURN_GUIDE`)
+ *   - `firstTurnGuideText` (one-shot near-field quick-action guide for ALL
+ *     models: compress the first wave of thinking so it fits the 1024
+ *     bootstrap budget — the measured interruption fix; system prompt
+ *     untouched, stops after promotion — see `DEFAULT_FIRST_TURN_GUIDE`)
  *   - shared `promotionSignal()` / anchor-override exports (kept for tooling
  *     and tests).
  *
@@ -74,32 +69,17 @@ export const inject = []
 const DEFAULT_BOOTSTRAP_MAX_TOKENS = 1024
 
 /**
- * Bootstrap budget for Flash-family models. The measured 1024 anchor value
- * comes from v4-pro (Project2: "We need" trajectory in 26/32 runs). Flash
- * reasoning is visibly longer at the same reasoning_effort: a complex first
- * task produced 1852 chars (~1200+ tokens) of reasoning and exceeded 1024,
- * so the first step ended empty (interruption). Flash gets a larger budget
- * by default; the value stays configurable.
- */
-const DEFAULT_BOOTSTRAP_FLASH_MAX_TOKENS = 4096
-
-/**
- * One-shot first-turn quick-action guide for Flash-family models. The FIRST
- * wave of thinking is the only one under the bootstrap budget; flash
- * reasoning at 'max' effort can exceed it on complex tasks (measured
- * interruption). Instead of widening the budget forever, this fixed
- * near-field user message (the measured strongest guidance position) guides
- * that first wave to act quickly; detailed reasoning is deferred to later
- * steps, which run at the session's own unlimited budget. The system prompt
- * is never touched, so the minimal anchor stays byte-exact.
+ * One-shot first-turn quick-action guide (all models). The FIRST wave of
+ * thinking is the only one under the bootstrap budget; a complex first task
+ * can blow past 1024 and end the first step empty (measured interruption,
+ * session(3)). This fixed near-field user message (the measured strongest
+ * guidance position) guides that first wave to act quickly; detailed
+ * reasoning is deferred to later steps, which run at the session's own
+ * unlimited budget. The system prompt is never touched, so the minimal
+ * anchor stays byte-exact.
  */
 const DEFAULT_FIRST_TURN_GUIDE =
   'First turn: act now — call a tool (read a file or run a command) rather than planning at length. Detailed reasoning can come in later steps.'
-
-/** True when the routed model id is a Flash-family model. */
-function isFlashModel(modelId) {
-  return typeof modelId === 'string' && /flash/i.test(modelId)
-}
 
 /** Durable session event types that count as a promotion signal per mode. */
 const PROMOTE_EVENTS = {
@@ -171,10 +151,6 @@ export function apply(ctx, config) {
   const shellTools = stringList(config.shellTools, 'shellTools')
   const promoteOn = parsePromoteOn(config.promoteOn)
   const bootstrapMaxTokens = positiveInt(config.bootstrapMaxTokens, 'bootstrapMaxTokens', DEFAULT_BOOTSTRAP_MAX_TOKENS)
-  const bootstrapFlashMaxTokens = positiveInt(
-    config.bootstrapFlashMaxTokens, 'bootstrapFlashMaxTokens', DEFAULT_BOOTSTRAP_FLASH_MAX_TOKENS,
-  )
-  const bootstrapBudgets = new Set([bootstrapMaxTokens, bootstrapFlashMaxTokens])
   const suppressedContextSources = new Set(
     stringListAllowEmpty(config.suppressedContextSources ?? DEFAULT_SUPPRESSED_CONTEXT_SOURCES, 'suppressedContextSources'),
   )
@@ -248,10 +224,10 @@ export function apply(ctx, config) {
     }
   })
 
-  /** The bootstrap output budget for the agent's model (Flash gets more). */
-  const budgetFor = (agent) => (isFlashModel(agent?.options?.model) ? bootstrapFlashMaxTokens : bootstrapMaxTokens)
-
   // Cap the first model request's output budget while bootstrapping.
+  // One uniform budget (1024, the measured anchor value) for every model —
+  // no per-model special-casing, so sessions that switch models mid-flight
+  // can never receive a mismatched budget.
   ctx.on('agent/request', async (payload, next) => {
     const resolved = await next()
     const agent = payload.agent
@@ -259,7 +235,7 @@ export function apply(ctx, config) {
       // The next request's seed proposal carries the previous header's
       // maxTokens forward, so the injected cap must be stripped explicitly —
       // otherwise it would persist for the whole session.
-      if (bootstrapBudgets.has(resolved.maxTokens)) {
+      if (resolved.maxTokens === bootstrapMaxTokens) {
         const { maxTokens: _bootstrap, ...rest } = resolved
         return rest
       }
@@ -267,7 +243,7 @@ export function apply(ctx, config) {
     }
     return {
       ...resolved,
-      maxTokens: budgetFor(agent),
+      maxTokens: bootstrapMaxTokens,
     }
   })
 
@@ -275,14 +251,13 @@ export function apply(ctx, config) {
   // bootstrap. Because this listener is the first registered (see the inject
   // note and the row order in agent.cordis.yml), the strip is the final
   // waterfall transform and actually removes what later listeners inject.
-  // Also injects a one-shot first-turn quick-action guide for Flash-family
-  // models: the FIRST wave of thinking is the only one under the bootstrap
-  // budget, and flash reasoning at 'max' effort can exceed it on complex
-  // tasks (measured interruption). Instead of widening the budget forever we
-  // guide that first wave to act quickly. The guide is a fixed near-field
-  // user message (the measured strongest guidance position), never a system
-  // change — the minimal anchor stays byte-exact — and stops automatically
-  // after promotion. `firstTurnGuideText: ''` disables it; a custom string
+  // Also injects a one-shot first-turn quick-action guide (all models): the
+  // FIRST wave of thinking is the only one under the bootstrap budget, and a
+  // complex first task can blow past it and end the first step empty
+  // (measured interruption). The guide is a fixed near-field user message
+  // (the measured strongest guidance position), never a system change — the
+  // minimal anchor stays byte-exact — and stops automatically after
+  // promotion. `firstTurnGuideText: ''` disables it; a custom string
   // replaces the default.
   ctx.on('agent/pre-step', async (payload, next) => {
     const decision = await next()
@@ -293,7 +268,7 @@ export function apply(ctx, config) {
     if (suppressedContextSources.size > 0) {
       messages = messages.filter((message) => !suppressedContextSources.has(message.source?.kind))
     }
-    if (firstTurnGuide !== '' && isFlashModel(agent?.options?.model)) {
+    if (firstTurnGuide !== '') {
       const sessionId = agent?.session?.id
       if (sessionId !== undefined && !guideInjected.has(sessionId)) {
         guideInjected.add(sessionId)
